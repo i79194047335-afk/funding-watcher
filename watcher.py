@@ -1,6 +1,8 @@
 import requests
 from datetime import datetime
 
+import telegram_notify
+
 # Адрес API Hyperliquid — бесплатно, без ключей
 URL = "https://api.hyperliquid.xyz/info"
 
@@ -98,6 +100,23 @@ def main():
                   f"объём {fmt_volume(r['volume_usd'])}  → собираем: {side} + спот")
 
     print(f"\nВсего перпов: {len(rates)} | со спотом на HL: {sum(r['has_spot'] for r in rates)}")
+
+    # --- Уведомление в Telegram, если есть кандидаты ---
+    if candidates:
+        notify_candidates(candidates)
+
+
+def notify_candidates(candidates):
+    """Собирает сообщение по кандидатам и шлёт в Telegram."""
+    lines = ["🔔 <b>Funding Watcher: есть кандидаты!</b>", ""]
+    for r in candidates:
+        side = "шорт перп" if r["hourly_%"] > 0 else "лонг перп"
+        lines.append(
+            f"<b>{r['coin']}</b>: {r['hourly_%']:.4f}%/ч "
+            f"({r['annual_%']:.0f}%/год), объём {fmt_volume(r['volume_usd'])}\n"
+            f"→ {side} + спот"
+        )
+    telegram_notify.send_message("\n".join(lines))
 
 
 if __name__ == "__main__":
