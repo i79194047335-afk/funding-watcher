@@ -111,8 +111,9 @@ def notify_candidates(candidates):
     lines = ["🔔 <b>Funding Watcher: есть кандидаты!</b>", ""]
     for r in candidates:
         side = "шорт перп" if r["hourly_%"] > 0 else "лонг перп"
+        url = f"https://app.hyperliquid.xyz/trade/{r['coin']}"
         lines.append(
-            f"<b>{r['coin']}</b>: {r['hourly_%']:.4f}%/ч "
+            f'<a href="{url}"><b>{r["coin"]}</b></a>: {r["hourly_%"]:.4f}%/ч '
             f"({r['annual_%']:.0f}%/год), объём {fmt_volume(r['volume_usd'])}\n"
             f"→ {side} + спот"
         )
