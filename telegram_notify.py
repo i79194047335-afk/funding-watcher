@@ -3,7 +3,9 @@ import os
 import requests
 from dotenv import load_dotenv
 
-load_dotenv()  # читает .env в переменные окружения
+# Грузим .env из папки этого файла — чтобы работало и при запуске из cron (другая cwd)
+_ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+load_dotenv(_ENV_PATH)
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")

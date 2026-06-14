@@ -1,7 +1,12 @@
+import os
+import json
 import requests
 from datetime import datetime
 
 import telegram_notify
+
+# Файл, где помним, о каких монетах уже уведомили (защита от спама)
+STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "notified_state.json")
 
 # Адрес API Hyperliquid — бесплатно, без ключей
 URL = "https://api.hyperliquid.xyz/info"
@@ -101,9 +106,35 @@ def main():
 
     print(f"\nВсего перпов: {len(rates)} | со спотом на HL: {sum(r['has_spot'] for r in rates)}")
 
-    # --- Уведомление в Telegram, если есть кандидаты ---
-    if candidates:
-        notify_candidates(candidates)
+    # --- Уведомление в Telegram только о НОВЫХ кандидатах (защита от спама) ---
+    current = {r["coin"]: r for r in candidates}
+    already_notified = load_notified()
+    new_coins = [c for c in current if c not in already_notified]
+
+    if new_coins:
+        print(f"Новых кандидатов: {len(new_coins)} → шлю в Telegram")
+        notify_candidates([current[c] for c in new_coins])
+    else:
+        print("Новых кандидатов нет — Telegram не беспокою.")
+
+    # Запоминаем текущий список: ушедшие забываются и при возврате снова дадут сигнал
+    save_notified(list(current.keys()))
+
+
+def load_notified():
+    """Читает множество монет, о которых уже уведомили."""
+    try:
+        with open(STATE_FILE) as f:
+            return set(json.load(f))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return set()
+
+
+def save_notified(coins):
+    """Сохраняет текущий список уведомлённых монет."""
+    os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
+    with open(STATE_FILE, "w") as f:
+        json.dump(coins, f)
 
 
 def notify_candidates(candidates):
