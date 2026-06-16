@@ -94,14 +94,18 @@ def log(msg):
 
 def save_history(rates):
     """Добавляет строки в CSV с историей по всем монетам за этот запуск."""
-    os.makedirs(os.path.dirname(HISTORY_FILE), exist_ok=True)
-    stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    file_exists = os.path.exists(HISTORY_FILE)
-    with open(HISTORY_FILE, "a") as f:
-        if not file_exists:
-            f.write("timestamp,coin,hourly_pct,annual_pct,volume_usd,has_spot\n")
-        for r in rates:
-            f.write(f"{stamp},{r['coin']},{r['hourly_%']},{r['annual_%']},{r['volume_usd']},{r['has_spot']}\n")
+    try:
+        os.makedirs(os.path.dirname(HISTORY_FILE), exist_ok=True)
+        stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        file_exists = os.path.exists(HISTORY_FILE)
+        with open(HISTORY_FILE, "a") as f:
+            if not file_exists:
+                f.write("timestamp,coin,hourly_pct,annual_pct,volume_usd,has_spot\n")
+            for r in rates:
+                f.write(f"{stamp},{r['coin']},{r['hourly_%']},{r['annual_%']},{r['volume_usd']},{r['has_spot']}\n")
+    except Exception as e:
+        log(f"ОШИБКА save_history: {e}")
+        print(f"[!] Не смог записать историю в CSV: {e}")
 
 
 def main():
@@ -110,8 +114,15 @@ def main():
     spot_bases = get_spot_bases()
     rates = get_funding_rates(spot_bases)
 
+    # Частичный сбой: если spot_bases пуст — все монеты получат has_spot=False,
+    # кандидатов будет 0, и бот соврёт «рынок спокойный». Проверяем оба.
+    if not spot_bases:
+        print("[!] Список спотов не получен (API). Пропускаю запуск — иначе кандидаты не видны.")
+        log("Запуск прерван: get_spot_bases вернул пустой результат")
+        return
+
     if not rates:
-        print("Данные не получены (API не ответил). Проверь логи.")
+        print("[!] Данные не получены (API не ответил). Проверь логи.")
         log("Запуск прерван: API не вернул данные")
         return
 
