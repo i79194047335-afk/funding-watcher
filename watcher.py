@@ -93,32 +93,49 @@ def main():
         and r["has_spot"]
     ]
 
-    print(f"\nРЕАЛЬНЫЕ КАНДИДАТЫ "
+    # Разделяем: положительный фандинг = можно хеджить, отрицательный = нужен шорт спота
+    actionable = [r for r in candidates if r["hourly_%"] > 0]
+    skip_negative = [r for r in candidates if r["hourly_%"] <= 0]
+
+    print(f"\nКАНДИДАТЫ "
           f"(фандинг ≥ {MIN_FUNDING_PCT}%/ч, объём ≥ {fmt_volume(MIN_VOLUME_USD)}, есть спот)")
     print("-" * 53)
     if not candidates:
         print("Сейчас таких нет — рынок спокойный. Это нормально, ждём волну.")
     else:
-        for r in candidates:
-            side = "шорт перп" if r["hourly_%"] > 0 else "лонг перп"
-            print(f"{r['coin']:<12}{r['hourly_%']:>10.4f}%/ч  "
-                  f"объём {fmt_volume(r['volume_usd'])}  → собираем: {side} + спот")
+        if actionable:
+            print("  Доступны для сделки (+):")
+            for r in actionable:
+                print(f"  {r['coin']:<12}{r['hourly_%']:>10.4f}%/ч  "
+                      f"объём {fmt_volume(r['volume_usd'])}  → шорт перп + спот ✓")
+        if skip_negative:
+            print("  Пропускаем (−, нужен шорт спота — на HL недоступен):")
+            for r in skip_negative:
+                print(f"  {r['coin']:<12}{r['hourly_%']:>10.4f}%/ч  "
+                      f"объём {fmt_volume(r['volume_usd'])}  → ✗ недоступен")
 
     print(f"\nВсего перпов: {len(rates)} | со спотом на HL: {sum(r['has_spot'] for r in rates)}")
 
-    # --- Уведомление в Telegram только о НОВЫХ кандидатах (защита от спама) ---
-    current = {r["coin"]: r for r in candidates}
+    # --- Уведомление в Telegram: только доступные (+), с сигналом на вход и на выход ---
+    # Отслеживаем только actionable (положительный фандинг) — отрицательные недоступны без шорта спота
+    current_actionable = {r["coin"]: r for r in actionable}
     already_notified = load_notified()
-    new_coins = [c for c in current if c not in already_notified]
+
+    new_coins = [c for c in current_actionable if c not in already_notified]
+    exited_coins = [c for c in already_notified if c not in current_actionable]
 
     if new_coins:
         print(f"Новых кандидатов: {len(new_coins)} → шлю в Telegram")
-        notify_candidates([current[c] for c in new_coins])
+        notify_candidates([current_actionable[c] for c in new_coins])
     else:
         print("Новых кандидатов нет — Telegram не беспокою.")
 
-    # Запоминаем текущий список: ушедшие забываются и при возврате снова дадут сигнал
-    save_notified(list(current.keys()))
+    if exited_coins:
+        print(f"Вышли из кандидатов: {len(exited_coins)} → шлю в Telegram")
+        notify_exited(exited_coins)
+
+    # Запоминаем текущий список доступных: ушедшие забываются и при возврате снова дадут сигнал
+    save_notified(list(current_actionable.keys()))
 
 
 def load_notified():
@@ -147,6 +164,18 @@ def notify_candidates(candidates):
             f'<a href="{url}"><b>{r["coin"]}</b></a>: {r["hourly_%"]:.4f}%/ч '
             f"({r['annual_%']:.0f}%/год), объём {fmt_volume(r['volume_usd'])}\n"
             f"→ {side} + спот"
+        )
+    telegram_notify.send_message("\n".join(lines))
+
+
+def notify_exited(coins):
+    """Шлёт в Telegram предупреждение: кандидат ушёл, пора закрывать."""
+    lines = ["🔕 <b>Funding Watcher: кандидаты ушли</b>", ""]
+    for coin in coins:
+        url = f"https://app.hyperliquid.xyz/trade/{coin}"
+        lines.append(
+            f'<a href="{url}"><b>{coin}</b></a>: ставка вернулась к норме '
+            f"→ пора закрывать позицию (обе ноги)"
         )
     telegram_notify.send_message("\n".join(lines))
 
